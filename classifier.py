@@ -55,7 +55,13 @@ def build_few_shot_prompt(labeled_examples: list[dict], description: str) -> str
 
     Before writing code, complete specs/classifier-spec.md.
     """
-    return ""
+    """
+    Thin wrapper called by the pipeline.
+    Accepts labeled_examples and a raw description string, wraps the description
+    in a minimal episode dict, and delegates to construct_prompt.
+    """
+    new_episode = {"title": "", "podcast": "", "description": description}
+return construct_prompt(labeled_examples, new_episode)
 
 
 def classify_episode(description: str, labeled_examples: list[dict]) -> dict:
@@ -76,7 +82,28 @@ def classify_episode(description: str, labeled_examples: list[dict]) -> dict:
 
     Before writing code, complete specs/classifier-spec.md.
     """
-    return {
-        "label": None,
-        "reasoning": "Classifier not yet implemented. Complete Milestone 2.",
-    }
+
+        prompt = build_few_shot_prompt(labeled_examples, description)
+ 
+    try:
+        response = _client.chat.completions.create(
+            model=MODEL,
+            max_tokens=120,  # enough for label + one-sentence reasoning
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.choices[0].message.content.strip()
+        parsed = json.loads(raw)
+        label     = str(parsed.get("label", "")).strip().lower()
+        reasoning = str(parsed.get("reasoning", "")).strip()
+    except (json.JSONDecodeError, KeyError, AttributeError, Exception) as exc:
+        return {
+            "label": "unknown",
+            "reasoning": f"Classifier failed to parse a valid response: {exc}",
+        }
+ 
+    if label not in VALID_LABELS:
+        label = "unknown"
+ 
+    return {"label": label, "reasoning": reasoning}
+
+    
